@@ -1,83 +1,108 @@
 import os
+import re
 import requests
-import logging
-from typing import Optional
+from typing import Any, Dict
+
+# config
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
+MODEL = os.getenv("HUGGINGFACE_MODEL") or "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+ENDPOINT = os.getenv("HUGGINGFACE_ENDPOINT")
+
+try:
+    from huggingface_hub import InferenceClient
+except Exception:
+    InferenceClient = None
 
 
-# Support both HF_API_KEY and HUGGINGFACE_API_KEY for compatibility
-def _get_hf_api_key() -> Optional[str]:
-    return os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
+def _local_fallback(topic: str) -> Dict[str, Any]:
+    return {"pergunta": f"(Fallback) Sobre {topic}", "alternativas": ["A","B","C","D"], "resposta_correta": "A"}
 
 
-def _local_fallback_question(topic: str, reason: str = ""):
-    alternatives = [
-        "Alternativa 1",
-        "Alternativa 2",
-        "Alternativa 3",
-        "Alternativa 4",
-    ]
-    return {
-        "enunciado": f"(Fallback) Sobre {topic}: Qual é a alternativa correta?",
-        "alternativas": alternatives,
-        "correta": "A",
-        "feedback": f"Questão gerada localmente porque o gerador externo falhou: {reason}",
-    }
-
-
-def generate_question(topic: str):
-    api_key = _get_hf_api_key()
-    model = os.getenv("HUGGINGFACE_MODEL") or os.getenv("HF_MODEL") or "gpt2"
-
-    prompt = f"Crie uma questão de múltipla escolha sobre {topic}. Inclua 4 alternativas (A, B, C, D), indique a resposta correta e uma explicação breve."
-
-    if not api_key:
-        logging.info("No Hugging Face API key found in environment.")
-        return _local_fallback_question(topic, "Hugging Face API key não definida")
-
-    url = f"https://api-inference.huggingface.co/models/{model}"
-    headers = {"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
-    payload = {"inputs": prompt, "parameters": {"max_new_tokens": 256}}
+def _extract_json_from_text(text: str) -> Any:
+    # prefer ```json {...}``` or ```{...}``` blocks
+    m = re.search(r"```json\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
+    if not m:
+        m = re.search(r"```\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
+    if not m:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end+1]
+        else:
+            return None
+    else:
+        candidate = m.group(1)
 
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        import json
+        return json.loads(candidate)
+    except Exception:
+        return None
+
+
+def generate_question(topic: str) -> Any:
+    prompt = f"Crie uma questão de múltipla escolha sobre {topic}. Retorne um JSON com pergunta, alternativas e resposta_correta."
+
+    # 1) prefer HF client
+    if InferenceClient and API_KEY:
+        client_error = None
+        try:
+            client = InferenceClient(token=API_KEY, timeout=60)
+            try:
+                out = client.text_generation(prompt, model=MODEL, max_new_tokens=256)
+            except Exception as e_text:
+                # try conversational/chat completion if text_generation unsupported
+                try:
+                    if hasattr(client, 'chat_completion'):
+                        out = client.chat_completion(model=MODEL, messages=[{"role": "user", "content": prompt}])
+                    else:
+                        out = client.chat(model=MODEL, messages=[{"role": "user", "content": prompt}])
+                except Exception as e_chat:
+                    client_error = f"text_error: {e_text}; chat_error: {e_chat}"
+                    out = None
+
+            if out is not None:
+                # parse output
+                if isinstance(out, str):
+                    parsed = _extract_json_from_text(out)
+                    return parsed if parsed is not None else out
+                if isinstance(out, dict):
+                    if "generated_text" in out:
+                        parsed = _extract_json_from_text(out["generated_text"])
+                        return parsed if parsed is not None else out["generated_text"]
+                    if "choices" in out and len(out["choices"])>0:
+                        content = out["choices"][0].get("message", {}).get("content") or out["choices"][0].get("text")
+                        if content:
+                            parsed = _extract_json_from_text(content)
+                            return parsed if parsed is not None else content
+                    return out
+        except Exception as e:
+            client_error = str(e)
+
+    # 2) HTTP fallback
+    url = ENDPOINT if ENDPOINT else f"https://api-inference.huggingface.co/models/{MODEL}"
+    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
+    try:
+        resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=30)
     except Exception as e:
-        logging.warning("Request to Hugging Face failed: %s", e)
-        return _local_fallback_question(topic, f"Request error: {e}")
+        return {"error": "http_request_failed", "details": str(e), "client_error": client_error if 'client_error' in locals() else None, "fallback": _local_fallback(topic)}
 
     if resp.status_code != 200:
-        # Try to get any useful message from the response; handle non-JSON bodies
-        body = None
-        try:
-            body = resp.json()
-        except Exception:
-            body = resp.text or f"HTTP {resp.status_code}"
-        logging.warning("Hugging Face inference returned status %s: %s", resp.status_code, body)
-        return _local_fallback_question(topic, f"Hugging Face error: {body}")
+        # include client_error if available for diagnostics
+        return {"error": "http_status", "status": resp.status_code, "body": resp.text, "client_error": client_error if 'client_error' in locals() else None, "fallback": _local_fallback(topic)}
 
-    # Successful response: try parse JSON and extract text
+    # parse response
     try:
-        data = resp.json()
-    except Exception as e:
-        logging.warning("Failed to parse JSON from Hugging Face response: %s", e)
-        text = resp.text.strip()
-        if text:
-            return {"raw": text}
-        return _local_fallback_question(topic, "Resposta HF vazia ou inválida")
+        body = resp.json()
+    except Exception:
+        body = resp.text
 
-    # HF may return list or dict; extract generated text
-    generated = None
-    if isinstance(data, list) and len(data) > 0:
-        first = data[0]
-        if isinstance(first, dict):
-            generated = first.get("generated_text") or first.get("text")
-        elif isinstance(first, str):
-            generated = first
-    elif isinstance(data, dict):
-        generated = data.get("generated_text") or data.get("text")
+    if isinstance(body, str):
+        parsed = _extract_json_from_text(body)
+        return parsed if parsed is not None else body
 
-    if generated:
-        return {"raw": generated}
+    if isinstance(body, list) and len(body)>0 and isinstance(body[0], dict) and "generated_text" in body[0]:
+        parsed = _extract_json_from_text(body[0]["generated_text"])
+        return parsed if parsed is not None else body[0]["generated_text"]
 
-    # Nothing usable returned
-    logging.warning("Hugging Face returned no generated text: %s", data)
-    return _local_fallback_question(topic, "Hugging Face não retornou texto gerado")
+    return body if body else {"error": "empty_response", "fallback": _local_fallback(topic)}

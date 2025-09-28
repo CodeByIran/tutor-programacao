@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Llama 4 Gerador de Questões</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 24px; color:#111 }
+      input, button, select, textarea { font-size: 1rem; padding: 8px; margin:6px 0 }
+      .card { border:1px solid #e6e6e6; padding:16px; border-radius:8px; max-width:760px }
+      .alt { margin:6px 0 }
+      .answer { font-weight:700; color: #0b5 }
+      .error { color: #b00 }
+    </style>
+  </head>
+  <body>
+    <h1>Llama 4 — Gerador de Questões (Llama)</h1>
+    <div class="card">
+      <label for="topic">Tópico</label>
+      <input id="topic" placeholder="ex.: Impacto da IA" value="" />
+      <div>
+        <button id="ask">Gerar questão</button>
+        <button id="example">Exemplo rápido</button>
+      </div>
+      <div id="status" style="margin-top:12px"></div>
+      <hr />
+      <div id="result"></div>
+    </div>
+
+    <script>
+      const status = document.getElementById('status');
+      const result = document.getElementById('result');
+      document.getElementById('ask').addEventListener('click', async () => {
+        const topic = document.getElementById('topic').value || 'matemática';
+        status.textContent = 'Enviando requisição...';
+        result.innerHTML = '';
+        try {
+          const base = (window.location && window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'http://localhost:8000';
+          const url = base + '/question?topic=' + encodeURIComponent(topic);
+          console.log('fetching', url);
+          const res = await fetch(url);
+          const text = await res.text();
+          if (!res.ok) {
+            status.textContent = '';
+            result.innerHTML = `<div class="error">Erro: ${res.status} — ${escapeHtml(text)}</div>`;
+            return;
+          }
+          // try parse JSON
+          let body;
+          try { body = JSON.parse(text); } catch (e) { body = text }
+          status.textContent = '';
+          renderQuestion(body);
+        } catch (err) {
+          status.textContent = '';
+          result.innerHTML = `<div class="error">Erro: ${err.message}</div>`;
+        }
+      });
+
+      document.getElementById('example').addEventListener('click', () => {
+        renderQuestion({
+          pergunta: 'Qual é o resultado de 2 + 2?',
+          alternativas: ['2','3','4','5'],
+          resposta_correta: 'C'
+        });
+      });
+
+      function renderQuestion(q) {
+        if (!q || typeof q !== 'object') { result.innerHTML = '<div class="error">Resposta inesperada</div>'; return }
+        const alt = Array.isArray(q.alternativas) ? q.alternativas : [];
+        let html = `<h3>${escapeHtml(q.pergunta || '—')}</h3>`;
+        html += '<ol type="A">';
+        for (let i=0;i<alt.length;i++) html += `<li class="alt">${escapeHtml(String(alt[i]||''))}</li>`;
+        html += '</ol>';
+        if (q.resposta_correta) html += `<div class="answer">Resposta: ${escapeHtml(String(q.resposta_correta))}</div>`;
+        result.innerHTML = html;
+      }
+
+      function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"})[c]) }
+    </script>
+  </body>
+</html>
