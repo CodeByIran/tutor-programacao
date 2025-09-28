@@ -1,9 +1,10 @@
 import os
 import re
+import json
 import requests
-from typing import Any, Dict
+from typing import Any, Dict, List
 
-# config
+# simples
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
 MODEL = os.getenv("HUGGINGFACE_MODEL") or "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 ENDPOINT = os.getenv("HUGGINGFACE_ENDPOINT")
@@ -14,95 +15,165 @@ except Exception:
     InferenceClient = None
 
 
-def _local_fallback(topic: str) -> Dict[str, Any]:
-    return {"pergunta": f"(Fallback) Sobre {topic}", "alternativas": ["A","B","C","D"], "resposta_correta": "A"}
+def _fallback(topic: str, fase: int = 2) -> Dict[str, Any]:
+    # gera um fallback simples consistente com a fase: fase 1 -> 4 alternativas (A-D), fase 2 -> 5 alternativas (A-E)
+    letters = ["A", "B", "C", "D", "E"]
+    if fase == 1:
+        raw = ["alternativa A", "alternativa B", "alternativa C", "alternativa D"]
+    else:
+        raw = ["alternativa A", "alternativa B", "alternativa C", "alternativa D", "alternativa E"]
+    alts = [f"{letters[i]}) {txt}" for i, txt in enumerate(raw)]
+    correct = "A"
+    return {"pergunta": f"(Fallback) Sobre {topic}", "alternativas": alts, "resposta_correta": correct}
 
 
-def _extract_json_from_text(text: str) -> Any:
-    # prefer ```json {...}``` or ```{...}``` blocks
-    m = re.search(r"```json\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
+def _find_json(s: str):
+    # pega bloco JSON entre ``` ou o primeiro { ... }
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", s, flags=re.DOTALL)
     if not m:
-        m = re.search(r"```\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
-    if not m:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            candidate = text[start:end+1]
-        else:
+        i = s.find("{")
+        j = s.rfind("}")
+        if i == -1 or j == -1:
             return None
+        candidate = s[i:j+1]
     else:
         candidate = m.group(1)
-
     try:
-        import json
         return json.loads(candidate)
     except Exception:
         return None
 
 
-def generate_question(topic: str) -> Any:
-    prompt = f"Crie uma questão de múltipla escolha sobre {topic}. Retorne um JSON com pergunta, alternativas e resposta_correta."
+def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
+    """
+    Gera uma questão de múltipla escolha sobre `topic` seguindo o formato ONIA.
 
-    # 1) prefer HF client
+    Args:
+        topic: tópico da questão (ex: 'raciocínio lógico', 'história da IA').
+        fase: 1 -> 4 alternativas (A-D). 2 -> 5 alternativas (A-E). Default 2.
+
+    Retorna:
+        dict com chaves: pergunta (str), alternativas (list[str]), resposta_correta (str letra).
+    """
+    # normaliza fase
+    try:
+        fase = int(fase)
+    except Exception:
+        fase = 2
+    if fase not in (1, 2):
+        fase = 2
+
+    letters = ["A", "B", "C", "D", "E"]
+    num_alts = 4 if fase == 1 else 5
+
+    # mapeamento simples de templates por categoria
+    cat = (categoria or "").strip().lower() if categoria else ""
+    if cat in ("logica", "lógica", "raciocinio", "raciocínio"):
+        intro = "(Lógica/Algoritmo) Questão que exige raciocínio, padrão, sequência, comandos ou travessias de grafos."
+    elif cat in ("conceitual", "teorica", "teórica", "teorico"):
+        intro = "(Conceitual) Questão sobre definições, história, tipos de IA ou princípios teóricos."
+    elif cat in ("etica", "ética", "sociedade"):
+        intro = "(Ética) Questão sobre vieses, riscos sociais, deepfakes, privacidade e implicações éticas."
+    else:
+        intro = "(Geral) Questão alinhada ao estilo ONIA: conceitual, lógica, ética ou aplicação prática."
+
+    # instrução rígida para o LLM: produzir apenas JSON válido e seguir o esquema ONIA
+    prompt = (
+        f"Você é um gerador de questões estilo Olimpíada Nacional de Inteligência Artificial (ONIA). "
+        f"{intro} Gere UMA questão de múltipla escolha sobre: {topic}. "
+        f"Use exatamente {num_alts} alternativas e rotule-as com letras {', '.join(letters[:num_alts])}. "
+        "Responda EXCLUSIVAMENTE com um JSON válido com os campos: \n"
+        "{\n  \"pergunta\": string,\n  \"alternativas\": [string,...],\n  \"resposta_correta\": string (uma letra como 'A'),\n  \"explicacao\": string (opcional, curta)\n}\n"
+        "Cada elemento em 'alternativas' deve ser apenas o texto da alternativa (sem prefixo de letra). "
+        "Não inclua explicações nem texto adicional fora do campo 'explicacao'. Não coloque código ou markdown, apenas o JSON."
+    )
+
+    # 1 - tentar client HF
     if InferenceClient and API_KEY:
-        client_error = None
         try:
-            client = InferenceClient(token=API_KEY, timeout=60)
+            client = InferenceClient(token=API_KEY)
             try:
-                out = client.text_generation(prompt, model=MODEL, max_new_tokens=256)
-            except Exception as e_text:
-                # try conversational/chat completion if text_generation unsupported
+                res = client.text_generation(prompt, model=MODEL, max_new_tokens=200)
+                text = res if isinstance(res, str) else (res.get("generated_text") if isinstance(res, dict) else str(res))
+            except Exception:
+                # tentar chat simples
                 try:
-                    if hasattr(client, 'chat_completion'):
-                        out = client.chat_completion(model=MODEL, messages=[{"role": "user", "content": prompt}])
-                    else:
-                        out = client.chat(model=MODEL, messages=[{"role": "user", "content": prompt}])
-                except Exception as e_chat:
-                    client_error = f"text_error: {e_text}; chat_error: {e_chat}"
-                    out = None
+                    r = client.chat_completion(model=MODEL, messages=[{"role":"user","content":prompt}])
+                    text = r.get("choices", [])[0].get("message", {}).get("content") if isinstance(r, dict) else str(r)
+                except Exception:
+                    text = None
 
-            if out is not None:
-                # parse output
-                if isinstance(out, str):
-                    parsed = _extract_json_from_text(out)
-                    return parsed if parsed is not None else out
-                if isinstance(out, dict):
-                    if "generated_text" in out:
-                        parsed = _extract_json_from_text(out["generated_text"])
-                        return parsed if parsed is not None else out["generated_text"]
-                    if "choices" in out and len(out["choices"])>0:
-                        content = out["choices"][0].get("message", {}).get("content") or out["choices"][0].get("text")
-                        if content:
-                            parsed = _extract_json_from_text(content)
-                            return parsed if parsed is not None else content
-                    return out
-        except Exception as e:
-            client_error = str(e)
+            if text:
+                parsed = _find_json(text)
+                if parsed and isinstance(parsed, dict):
+                    # garante número de alternativas correto
+                    alts = parsed.get("alternativas")
+                    if isinstance(alts, list) and len(alts) == num_alts:
+                        # prefixa alternativas com letras antes de retornar e mantém explicacao se houver
+                        prefixed = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+                        parsed["alternativas"] = prefixed
+                        if parsed.get("resposta_correta") and isinstance(parsed.get("resposta_correta"), str):
+                            parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
+                        return parsed
+                # se parse falhar ou formato incorreto, tenta continuar para o próximo fallback
+                # (mantemos text para debug quando nada mais funcionar)
+        except Exception:
+            pass
 
-    # 2) HTTP fallback
-    url = ENDPOINT if ENDPOINT else f"https://api-inference.huggingface.co/models/{MODEL}"
+    # 2 - fallback HTTP
+    url = ENDPOINT or f"https://api-inference.huggingface.co/models/{MODEL}"
     headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
     try:
-        resp = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=30)
-    except Exception as e:
-        return {"error": "http_request_failed", "details": str(e), "client_error": client_error if 'client_error' in locals() else None, "fallback": _local_fallback(topic)}
-
-    if resp.status_code != 200:
-        # include client_error if available for diagnostics
-        return {"error": "http_status", "status": resp.status_code, "body": resp.text, "client_error": client_error if 'client_error' in locals() else None, "fallback": _local_fallback(topic)}
-
-    # parse response
-    try:
-        body = resp.json()
+        r = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=20)
     except Exception:
-        body = resp.text
+        return _fallback(topic, fase=fase)
+
+    if r.status_code != 200:
+        return _fallback(topic, fase=fase)
+
+    try:
+        body = r.json()
+    except Exception:
+        body = r.text
 
     if isinstance(body, str):
-        parsed = _extract_json_from_text(body)
-        return parsed if parsed is not None else body
+        parsed = _find_json(body)
+        if parsed and isinstance(parsed, dict):
+            if isinstance(parsed.get("alternativas"), list) and len(parsed.get("alternativas")) == num_alts:
+                # prefixa
+                alts = parsed.get("alternativas")
+                parsed["alternativas"] = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+                if parsed.get("resposta_correta"):
+                    parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
+                return parsed
+        return parsed or body
 
-    if isinstance(body, list) and len(body)>0 and isinstance(body[0], dict) and "generated_text" in body[0]:
-        parsed = _extract_json_from_text(body[0]["generated_text"])
-        return parsed if parsed is not None else body[0]["generated_text"]
+    # handle typical HF list response
+    if isinstance(body, list) and body and isinstance(body[0], dict):
+        txt = body[0].get("generated_text") or body[0].get("text")
+        parsed = _find_json(txt or "")
+        if parsed and isinstance(parsed, dict):
+            if isinstance(parsed.get("alternativas"), list) and len(parsed.get("alternativas")) == num_alts:
+                alts = parsed.get("alternativas")
+                parsed["alternativas"] = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+                if parsed.get("resposta_correta"):
+                    parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
+                return parsed
+        return parsed or (txt or body[0])
 
-    return body if body else {"error": "empty_response", "fallback": _local_fallback(topic)}
+    # se nada funcionou, tente extrair JSON do texto bruto
+    parsed = None
+    try:
+        text = r.text
+        parsed = _find_json(text)
+        if parsed and isinstance(parsed, dict) and isinstance(parsed.get("alternativas"), list) and len(parsed.get("alternativas")) == num_alts:
+            alts = parsed.get("alternativas")
+            parsed["alternativas"] = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+            if parsed.get("resposta_correta"):
+                parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
+            return parsed
+    except Exception:
+        pass
+
+    # último recurso: fallback que respeita a fase
+    return _fallback(topic, fase=fase)
