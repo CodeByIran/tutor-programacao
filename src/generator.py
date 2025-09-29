@@ -88,7 +88,6 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
         "Não inclua explicações nem texto adicional fora do campo 'explicacao'. Não coloque código ou markdown, apenas o JSON."
     )
 
-    # 1 - tentar client HF
     if InferenceClient and API_KEY:
         try:
             client = InferenceClient(token=API_KEY)
