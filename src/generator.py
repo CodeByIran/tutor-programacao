@@ -4,9 +4,10 @@ import json
 import requests
 from typing import Any, Dict, List
 
-# simples
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
-MODEL = os.getenv("HUGGINGFACE_MODEL") or "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+API_KEY = os.getenv("HF_TOKEN") or os.getenv(
+    "HF_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
+MODEL = os.getenv(
+    "HUGGINGFACE_MODEL") or "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 ENDPOINT = os.getenv("HUGGINGFACE_ENDPOINT")
 
 try:
@@ -15,16 +16,26 @@ except Exception:
     InferenceClient = None
 
 
-def _fallback(topic: str, fase: int = 2) -> Dict[str, Any]:
-    # gera um fallback simples consistente com a fase: fase 1 -> 4 alternativas (A-D), fase 2 -> 5 alternativas (A-E)
-    letters = ["A", "B", "C", "D", "E"]
-    if fase == 1:
-        raw = ["alternativa A", "alternativa B", "alternativa C", "alternativa D"]
-    else:
-        raw = ["alternativa A", "alternativa B", "alternativa C", "alternativa D", "alternativa E"]
+def _fallback(topic: str) -> Dict[str, Any]:
+    letters = [
+        "A", "B", "C", "D", "E"
+    ]
+    raw = ["alternativa A", "alternativa B",
+           "alternativa C", "alternativa D", "alternativa E"]
     alts = [f"{letters[i]}) {txt}" for i, txt in enumerate(raw)]
     correct = "A"
     return {"pergunta": f"(Fallback) Sobre {topic}", "alternativas": alts, "resposta_correta": correct}
+
+# def _fallback(topic: str, fase: int = 2) -> Dict[str, Any]:
+#     # gera um fallback simples consistente com a fase: fase 1 -> 4 alternativas (A-D), fase 2 -> 5 alternativas (A-E)
+#     letters = ["A", "B", "C", "D", "E"]
+#     if fase == 1:
+#         raw = ["alternativa A", "alternativa B", "alternativa C", "alternativa D"]
+#     else:
+#         raw = ["alternativa A", "alternativa B", "alternativa C", "alternativa D", "alternativa E"]
+#     alts = [f"{letters[i]}) {txt}" for i, txt in enumerate(raw)]
+#     correct = "A"
+#     return {"pergunta": f"(Fallback) Sobre {topic}", "alternativas": alts, "resposta_correta": correct}
 
 
 def _find_json(s: str):
@@ -44,27 +55,13 @@ def _find_json(s: str):
         return None
 
 
-def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
+def generate_question(topic: str, categoria: str = None) -> Any:
     """
     Gera uma questão de múltipla escolha sobre `topic` seguindo o formato ONIA.
-
-    Args:
-        topic: tópico da questão (ex: 'raciocínio lógico', 'história da IA').
-        fase: 1 -> 4 alternativas (A-D). 2 -> 5 alternativas (A-E). Default 2.
-
-    Retorna:
-        dict com chaves: pergunta (str), alternativas (list[str]), resposta_correta (str letra).
+    Sempre com 5 alternativas (A-E).
     """
-    # normaliza fase
-    try:
-        fase = int(fase)
-    except Exception:
-        fase = 2
-    if fase not in (1, 2):
-        fase = 2
-
     letters = ["A", "B", "C", "D", "E"]
-    num_alts = 4 if fase == 1 else 5
+    num_alts = 5  # sempre 5 alternativas
 
     # mapeamento simples de templates por categoria
     cat = (categoria or "").strip().lower() if categoria else ""
@@ -92,13 +89,17 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
         try:
             client = InferenceClient(token=API_KEY)
             try:
-                res = client.text_generation(prompt, model=MODEL, max_new_tokens=200)
-                text = res if isinstance(res, str) else (res.get("generated_text") if isinstance(res, dict) else str(res))
+                res = client.text_generation(
+                    prompt, model=MODEL, max_new_tokens=200)
+                text = res if isinstance(res, str) else (
+                    res.get("generated_text") if isinstance(res, dict) else str(res))
             except Exception:
                 # tentar chat simples
                 try:
-                    r = client.chat_completion(model=MODEL, messages=[{"role":"user","content":prompt}])
-                    text = r.get("choices", [])[0].get("message", {}).get("content") if isinstance(r, dict) else str(r)
+                    r = client.chat_completion(model=MODEL, messages=[
+                                               {"role": "user", "content": prompt}])
+                    text = r.get("choices", [])[0].get("message", {}).get(
+                        "content") if isinstance(r, dict) else str(r)
                 except Exception:
                     text = None
 
@@ -109,10 +110,12 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
                     alts = parsed.get("alternativas")
                     if isinstance(alts, list) and len(alts) == num_alts:
                         # prefixa alternativas com letras antes de retornar e mantém explicacao se houver
-                        prefixed = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+                        prefixed = [f"{letters[i]}) {a}" for i,
+                                    a in enumerate(alts)]
                         parsed["alternativas"] = prefixed
                         if parsed.get("resposta_correta") and isinstance(parsed.get("resposta_correta"), str):
-                            parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
+                            parsed["resposta_correta"] = parsed["resposta_correta"].strip(
+                            ).upper()
                         return parsed
                 # se parse falhar ou formato incorreto, tenta continuar para o próximo fallback
                 # (mantemos text para debug quando nada mais funcionar)
@@ -123,7 +126,8 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
     url = ENDPOINT or f"https://api-inference.huggingface.co/models/{MODEL}"
     headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
     try:
-        r = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=20)
+        r = requests.post(url, headers=headers, json={
+                          "inputs": prompt}, timeout=20)
     except Exception:
         return _fallback(topic, fase=fase)
 
@@ -141,9 +145,11 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
             if isinstance(parsed.get("alternativas"), list) and len(parsed.get("alternativas")) == num_alts:
                 # prefixa
                 alts = parsed.get("alternativas")
-                parsed["alternativas"] = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+                parsed["alternativas"] = [
+                    f"{letters[i]}) {a}" for i, a in enumerate(alts)]
                 if parsed.get("resposta_correta"):
-                    parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
+                    parsed["resposta_correta"] = parsed["resposta_correta"].strip(
+                    ).upper()
                 return parsed
         return parsed or body
 
@@ -154,9 +160,11 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
         if parsed and isinstance(parsed, dict):
             if isinstance(parsed.get("alternativas"), list) and len(parsed.get("alternativas")) == num_alts:
                 alts = parsed.get("alternativas")
-                parsed["alternativas"] = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+                parsed["alternativas"] = [
+                    f"{letters[i]}) {a}" for i, a in enumerate(alts)]
                 if parsed.get("resposta_correta"):
-                    parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
+                    parsed["resposta_correta"] = parsed["resposta_correta"].strip(
+                    ).upper()
                 return parsed
         return parsed or (txt or body[0])
 
@@ -167,7 +175,8 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
         parsed = _find_json(text)
         if parsed and isinstance(parsed, dict) and isinstance(parsed.get("alternativas"), list) and len(parsed.get("alternativas")) == num_alts:
             alts = parsed.get("alternativas")
-            parsed["alternativas"] = [f"{letters[i]}) {a}" for i, a in enumerate(alts)]
+            parsed["alternativas"] = [
+                f"{letters[i]}) {a}" for i, a in enumerate(alts)]
             if parsed.get("resposta_correta"):
                 parsed["resposta_correta"] = parsed["resposta_correta"].strip().upper()
             return parsed
@@ -175,4 +184,4 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Any:
         pass
 
     # último recurso: fallback que respeita a fase
-    return _fallback(topic, fase=fase)
+    return _fallback(topic)

@@ -10,6 +10,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
+
 class Question(Base):
     __tablename__ = "questions"
 
@@ -18,6 +19,7 @@ class Question(Base):
     alternativas = Column(Text, nullable=False)
     correta = Column(String, nullable=False)
     feedback = Column(Text, nullable=True)
+
 
 def init_db():
     Base.metadata.create_all(bind=engine)
