@@ -84,7 +84,7 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
         cat,
         "(Geral) Questão alinhada ao estilo ONIA: conceitual, lógica, ética ou aplicação prática."
     )
-    # instrução rígida
+    
     prompt = (
         f"Você é um gerador de questões da Olimpíada Nacional de Inteligência Artificial (ONIA). "
         f"{intro} Gere UMA questão de múltipla escolha sobre: {topic}. "
