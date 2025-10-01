@@ -98,6 +98,7 @@
 
             } catch (err) { out.textContent = 'Erro: ' + err.message; }
             finally { status.textContent = ''; document.getElementById('ask').disabled = false }
+        
         }
 
         document.getElementById('ask').addEventListener('click', () => fetchQuestion(document.getElementById('topic').value || 'matemática'));

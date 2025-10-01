@@ -5,14 +5,13 @@ from fastapi.staticfiles import StaticFiles
 from src.generator import generate_question
 
 app = FastAPI()
-
-# static files folder
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/")
+
 def index():
     f = STATIC_DIR / "index.html"
     if f.exists():
