@@ -7,6 +7,9 @@ services:
     ports:
       - "8000:8000"
     # Keep secrets in .env (do NOT hardcode tokens here)
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ./src:/app/src
     env_file:
