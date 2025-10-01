@@ -53,40 +53,60 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
     letters = ["A", "B", "C", "D", "E"]
     num_alts = 4 if fase == 1 else 5
 
-    # categoria → intro
-    cat = (categoria or "").strip().lower()
-    if cat in ("logica", "lógica", "raciocinio", "raciocínio"):
-        intro = "(Lógica/Algoritmo) Questão que exige raciocínio, padrão, sequência, comandos ou travessias de grafos."
-    elif cat in ("conceitual", "teorica", "teórica", "teorico"):
-        intro = "(Conceitual) Questão sobre definições, história, tipos de IA ou princípios teóricos."
-    elif cat in ("etica", "ética", "sociedade"):
-        intro = "(Ética) Questão sobre vieses, riscos sociais, deepfakes, privacidade e implicações éticas."
-    else:
-        intro = "(Geral) Questão alinhada ao estilo ONIA: conceitual, lógica, ética ou aplicação prática."
+    # # categoria → intro
+    # cat = (categoria or "").strip().lower()
+    # if cat in ("logica", "lógica", "raciocinio", "raciocínio"):
+    #     intro = "(Lógica/Algoritmo) Questão que exige raciocínio, padrão, sequência, comandos ou travessias de grafos."
+    # elif cat in ("conceitual", "teorica", "teórica", "teorico"):
+    #     intro = "(Conceitual) Questão sobre definições, história, tipos de IA ou princípios teóricos."
+    # elif cat in ("etica", "ética", "sociedade"):
+    #     intro = "(Ética) Questão sobre vieses, riscos sociais, deepfakes, privacidade e implicações éticas."
+    # else:
+    #     intro = "(Geral) Questão alinhada ao estilo ONIA: conceitual, lógica, ética ou aplicação prática."
 
+    # categorias → intro
+    CATEGORIAS = {
+        "logica": "(Lógica/Algoritmo) Questão que exige raciocínio, padrão, sequência, comandos ou travessias de grafos.",
+        "lógica": "(Lógica/Algoritmo) Questão que exige raciocínio, padrão, sequência, comandos ou travessias de grafos.",
+        "raciocinio": "(Lógica/Algoritmo) Questão que exige raciocínio, padrão, sequência, comandos ou travessias de grafos.",
+        "raciocínio": "(Lógica/Algoritmo) Questão que exige raciocínio, padrão, sequência, comandos ou travessias de grafos.",
+        "conceitual": "(Conceitual) Questão sobre definições, história, tipos de IA ou princípios teóricos.",
+        "teorica": "(Conceitual) Questão sobre definições, história, tipos de IA ou princípios teóricos.",
+        "teórica": "(Conceitual) Questão sobre definições, história, tipos de IA ou princípios teóricos.",
+        "teorico": "(Conceitual) Questão sobre definições, história, tipos de IA ou princípios teóricos.",
+        "etica": "(Ética) Questão sobre vieses, riscos sociais, deepfakes, privacidade e implicações éticas.",
+        "ética": "(Ética) Questão sobre vieses, riscos sociais, deepfakes, privacidade e implicações éticas.",
+        "sociedade": "(Ética) Questão sobre vieses, riscos sociais, deepfakes, privacidade e implicações éticas.",
+    }
+
+    cat = (categoria or "").strip().lower()
+    intro = CATEGORIAS.get(
+        cat,
+        "(Geral) Questão alinhada ao estilo ONIA: conceitual, lógica, ética ou aplicação prática."
+    )
     # instrução rígida
     prompt = (
-    f"Você é um gerador de questões da Olimpíada Nacional de Inteligência Artificial (ONIA). "
-    f"{intro} Gere UMA questão de múltipla escolha sobre: {topic}. "
-    f"Use exatamente {num_alts} alternativas e rotule-as com letras {', '.join(letters[:num_alts])}. "
+        f"Você é um gerador de questões da Olimpíada Nacional de Inteligência Artificial (ONIA). "
+        f"{intro} Gere UMA questão de múltipla escolha sobre: {topic}. "
+        f"Use exatamente {num_alts} alternativas e rotule-as com letras {', '.join(letters[:num_alts])}. "
 
-    # Ideologia ONIA
-    "As questões devem seguir 4 pilares obrigatórios: \n"
-    "1. Foco Interdisciplinar e Técnico: incluir conceitos fundamentais de IA (definições, história, tipos de aprendizado, algoritmos clássicos como DFS/BFS). \n"
-    "2. Complexidade Algorítmica: explorar raciocínio lógico, padrões, máquinas de estados, big data, vetores, comandos e análise de sequências. \n"
-    "3. Relevância Ética e Social: abordar vieses, direitos autorais, neutralidade, limiares e implicações sociais da IA. \n"
-    "4. Fidelidade ao Formato ONIA: contextualizar o enunciado em cenários realistas e fornecer alternativas consistentes, com gabarito claro. \n"
+        # Ideologia ONIA
+        "As questões devem seguir 4 pilares obrigatórios: \n"
+        "1. Foco Interdisciplinar e Técnico: incluir conceitos fundamentais de IA (definições, história, tipos de aprendizado, algoritmos clássicos como DFS/BFS). \n"
+        "2. Complexidade Algorítmica: explorar raciocínio lógico, padrões, máquinas de estados, big data, vetores, comandos e análise de sequências. \n"
+        "3. Relevância Ética e Social: abordar vieses, direitos autorais, neutralidade, limiares e implicações sociais da IA. \n"
+        "4. Fidelidade ao Formato ONIA: contextualizar o enunciado em cenários realistas e fornecer alternativas consistentes, com gabarito claro. \n"
 
-    # Estrutura rígida de saída
-    "Responda EXCLUSIVAMENTE com um JSON válido com os campos: \n"
-    "{\n"
-    "  \"pergunta\": string,\n"
-    "  \"alternativas\": [string,...],\n"
-    "  \"resposta_correta\": string (uma letra como 'A'),\n"
-    "  \"explicacao\": string (opcional, curta)\n"
-    "}\n"
-    "Cada alternativa deve ser apenas o texto (sem prefixo de letra). "
-    "Responda SOMENTE com JSON válido, sem comentários, sem markdown e sem nada fora da estrutura definida."
+        # Estrutura rígida de saída
+        "Responda EXCLUSIVAMENTE com um JSON válido com os campos: \n"
+        "{\n"
+        "  \"pergunta\": string,\n"
+        "  \"alternativas\": [string,...],\n"
+        "  \"resposta_correta\": string (uma letra como 'A'),\n"
+        "  \"explicacao\": string (opcional, curta)\n"
+        "}\n"
+        "Cada alternativa deve ser apenas o texto (sem prefixo de letra). "
+        "Responda SOMENTE com JSON válido, sem comentários, sem markdown e sem nada fora da estrutura definida."
     )
 
     # 1 - Tentar com InferenceClient
@@ -123,7 +143,7 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
     headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
     try:
         r = requests.post(url, headers=headers, json={
-                          "inputs": assimprompt}, timeout=60)
+                          "inputs": prompt}, timeout=60)
     except Exception as e:
         raise RuntimeError(f"Erro de conexão no requests: {e}")
 
