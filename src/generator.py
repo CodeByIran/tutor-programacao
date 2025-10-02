@@ -109,7 +109,6 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
         "Responda SOMENTE com JSON válido, sem comentários, sem markdown e sem nada fora da estrutura definida."
     )
 
-    # 1 - Tentar com InferenceClient
     if InferenceClient and API_KEY:
         try:
             client = InferenceClient(token=API_KEY)
@@ -138,7 +137,6 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
         except Exception as e:
             raise RuntimeError(f"Erro no InferenceClient: {e}")
 
-    # 2 - fallback HTTP cru (requests)
     url = ENDPOINT or f"https://api-inference.huggingface.co/models/{MODEL}"
     headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
     try:
