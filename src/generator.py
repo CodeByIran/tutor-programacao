@@ -165,4 +165,3 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
         raise ValueError(f"Resposta inválida no fallback: {txt}")
 
     raise RuntimeError(f"Resposta não compreendida: {body}")
-
