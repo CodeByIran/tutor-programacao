@@ -42,7 +42,6 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
     Retorna sempre dict com pergunta, alternativas e resposta_correta.
     """
 
-    # normaliza fase
     try:
         fase = int(fase)
     except Exception:
