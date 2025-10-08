@@ -1,6 +1,7 @@
 import os
 import re
 import json
+from unittest import result
 import requests
 from typing import Any, Dict
 
@@ -89,10 +90,21 @@ Responda SOMENTE com um JSON válido no formato:
   "alternativas": [string,...],
   "resposta_correta": string (wuma letra como 'A'),
   "explicacao": string (curta, do porquê a correta é correta)
+  "explicacoes_erradas": [string,...]  # explicação breve para cada alternativa incorreta
 }}
 Cada alternativa deve conter apenas o texto (sem prefixo de letra).
 """
-    return call_huggingface_api(prompt, num_alts, letters)
+    result = call_huggingface_api(prompt, num_alts, letters)
+# Garante que o JSON tenha lista de explicações para alternativas erradas
+    if "explicacoes_erradas" not in result or not isinstance(result["explicacoes_erradas"], list):
+        # Cria lista de explicações vazias exceto para a correta
+        result["explicacoes_erradas"] = [
+            "" if letters[i] == result.get(
+                "resposta_correta") else "Explicação breve do porquê está errada"
+            for i in range(num_alts)
+        ]
+
+    return result
 
 
 def format_question(parsed: Dict[str, Any], num_alts: int, letters: list) -> Dict[str, Any]:
