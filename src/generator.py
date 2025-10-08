@@ -38,67 +38,6 @@ def _find_json(s: str):
         return None
 
 
-# def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[str, Any]:
-#     """
-#     Gera uma questão de múltipla escolha estilo ONIA.
-#     - categoria: macro área (ex.: Conceitual, Ética, Lógica, Aplicações)
-#     - topic: subtema específico (ex.: Conhecimento de padrão, Teste de Turing, Deepfakes)
-#     """
-#     try:
-#         fase = int(fase)
-#     except Exception:
-#         fase = 2
-#     if fase not in (1, 2):
-#         fase = 2
-
-#     letters = ["A", "B", "C", "D", "E"]
-#     num_alts = 4 if fase == 1 else 5
-
-#     CATEGORIAS = {
-#         "logica": "Lógica/Algoritmo",
-#         "lógica": "Lógica/Algoritmo",
-#         "raciocinio": "Lógica/Algoritmo",
-#         "raciocínio": "Lógica/Algoritmo",
-#         "conceitual": "Conceitual",
-#         "teorica": "Conceitual",
-#         "teórica": "Conceitual",
-#         "teorico": "Conceitual",
-#         "etica": "Ética e Sociedade",
-#         "ética": "Ética e Sociedade",
-#         "sociedade": "Ética e Sociedade",
-#         "aplicacoes": "Aplicações e História",
-#         "aplicações": "Aplicações e História",
-#     }
-
-#     cat_key = (categoria or "").strip().lower()
-#     cat_desc = CATEGORIAS.get(
-#         cat_key, "Geral"
-#     )
-
-#     prompt = (
-#         f"Você é um gerador de questões da Olimpíada Nacional de Inteligência Artificial (ONIA).\n"
-#         f"(Categoria: {cat_desc})\n"
-#         f"Tópico específico: {topic}\n\n"
-#         f"Gere UMA questão de múltipla escolha com {num_alts} alternativas, rotuladas com letras {', '.join(letters[:num_alts])}.\n\n"
-#         "As questões devem seguir 4 pilares obrigatórios:\n"
-#         "1. Foco Interdisciplinar e Técnico: incluir conceitos fundamentais de IA (definições, história, algoritmos clássicos como DFS/BFS).\n"
-#         "2. Complexidade Algorítmica: explorar raciocínio lógico, padrões, máquinas de estados, big data, vetores, comandos e sequências.\n"
-#         "3. Relevância Ética e Social: abordar vieses, direitos autorais, neutralidade, limiares e implicações sociais da IA.\n"
-#         "4. Fidelidade ao Formato ONIA: contextualizar o enunciado em cenários realistas, com alternativas consistentes e gabarito claro.\n\n"
-#         "Responda SOMENTE com um JSON válido no formato:\n"
-#         "{\n"
-#         "  \"categoria\": string,\n"
-#         "  \"topico\": string,\n"
-#         "  \"pergunta\": string,\n"
-#         "  \"alternativas\": [string,...],\n"
-#         "  \"resposta_correta\": string (uma letra como 'A'),\n"
-#         "  \"explicacao\": string (curta, do porquê a correta é correta)\n"
-#         "}\n"
-#         "Cada alternativa deve conter apenas o texto (sem prefixo de letra).\n"
-#     )
-#     return call_huggingface_api(prompt, num_alts, letters)
-
-
 def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[str, Any]:
     """
     Gera uma questão de múltipla escolha estilo ONIA.
@@ -116,7 +55,7 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
     letters = ["A", "B", "C", "D", "E"]
     num_alts = 4 if fase == 1 else 5
 
-#refatoração de categorias
+# refatoração de categorias
     _raw_categorias = {
         "Lógica/Algoritmo": ["logica", "lógica", "raciocinio", "raciocínio"],
         "Conceitual": ["conceitual", "teorica", "teórica", "teorico"],
