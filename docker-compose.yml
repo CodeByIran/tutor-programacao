@@ -1,29 +1,23 @@
-version: "3.9"
-
 services:
   api:
     build: .
-    container_name: deepseek_api
+    container_name: llama_api
     ports:
       - "8000:8000"
-    # Keep secrets in .env (do NOT hardcode tokens here)
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    volumes:
-      - ./src:/app/src
     env_file:
       - .env
+    volumes:
+      - ./src:/app/src
     depends_on:
       - db
 
   db:
     image: postgres:15
-    container_name: deepseek_db
+    container_name: llama_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: deepseek
+      POSTGRES_DB: llama
     ports:
       - "5432:5432"
     volumes:
@@ -31,7 +25,7 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4
-    container_name: deepseek_pgadmin
+    container_name: llama_pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
       PGADMIN_DEFAULT_PASSWORD: admin
