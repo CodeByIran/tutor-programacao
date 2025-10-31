@@ -38,74 +38,6 @@ def _find_json(s: str):
     except Exception:
         return None
 
-
-# def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[str, Any]:
-#     """
-#     Gera uma questão de múltipla escolha estilo ONIA.
-#     - categoria: macro área (ex.: Conceitual, Ética, Lógica, Aplicações)
-#     - topic: subtema específico (ex.: Conhecimento de padrão, Teste de Turing, Deepfakes)
-#     """
-
-#     try:
-#         fase = int(fase)
-#     except Exception:
-#         fase = 2
-#     if fase not in (1, 2):
-#         fase = 2
-
-#     letters = ["A", "B", "C", "D", "E"]
-#     num_alts = 4 if fase == 1 else 5
-
-# # refatoração de categorias
-#     _raw_categorias = {
-#         "Lógica/Algoritmo": ["logica", "lógica", "raciocinio", "raciocínio"],
-#         "Conceitual": ["conceitual", "teorica", "teórica", "teorico"],
-#         "Ética e Sociedade": ["etica", "ética", "sociedade"],
-#         "Aplicações e História": ["aplicacoes", "aplicações"],
-#     }
-#     CATEGORIAS = {k: cat for k, keys in _raw_categorias.items()
-#                   for cat in keys}
-
-#     cat_key = (categoria or "").strip().lower()
-#     cat_desc = CATEGORIAS.get(cat_key, "Geral")
-
-#     prompt = f"""
-# Você é um gerador de questões da Olimpíada Nacional de Inteligência Artificial (ONIA).
-# (Categoria: {cat_desc})
-# Tópico específico: {topic}
-
-# Gere UMA questão de múltipla escolha com {num_alts} alternativas, rotuladas com letras {', '.join(letters[:num_alts])}.
-
-# As questões devem seguir 4 pilares obrigatórios:
-# 1. Foco Interdisciplinar e Técnico: incluir conceitos fundamentais de IA (definições, história, algoritmos clássicos como DFS/BFS).
-# 2. Complexidade Algorítmica: explorar raciocínio lógico, padrões, máquinas de estados, big data, vetores, comandos e sequências.
-# 3. Relevância Ética e Social: abordar vieses, direitos autorais, neutralidade, limiares e implicações sociais da IA.
-# 4. Fidelidade ao Formato ONIA: contextualizar o enunciado em cenários realistas, com alternativas consistentes e gabarito claro.
-
-# Responda SOMENTE com um JSON válido no formato:
-# {{
-#   "categoria": string,
-#   "topico": string,
-#   "pergunta": string,
-#   "alternativas": [string,...],
-#   "resposta_correta": string (wuma letra como 'A'),
-#   "explicacao": string (curta, do porquê a correta é correta)
-#   "explicacoes_erradas": [string,...]  # explicação breve para cada alternativa incorreta
-# }}
-# Cada alternativa deve conter apenas o texto (sem prefixo de letra).
-# """
-#     result = call_huggingface_api(prompt, num_alts, letters)
-# # Garante que o JSON tenha lista de explicações para alternativas erradas
-#     if "explicacoes_erradas" not in result or not isinstance(result["explicacoes_erradas"], list):
-#         # Cria lista de explicações vazias exceto para a correta
-#         result["explicacoes_erradas"] = [
-#             "" if letters[i] == result.get(
-#                 "resposta_correta") else "Explicação breve do porquê está errada"
-#             for i in range(num_alts)
-#         ]
-
-#     return result
-
 def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[str, Any]:
     """
     Gera uma questão de múltipla escolha estilo ONIA 3ª fase (Categoria Regular),
@@ -121,8 +53,7 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
 
     letters = ["A", "B", "C", "D", "E"]
     num_alts = 4 if fase == 1 else 5
-
-    # Refatoração de categorias
+    
     _raw_categorias = {
         "Lógica/Algoritmo": ["logica", "lógica", "raciocinio", "raciocínio"],
         "Conceitual": ["conceitual", "teorica", "teórica", "teorico"],
@@ -133,7 +64,8 @@ def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[
     cat_key = (categoria or "").strip().lower()
     cat_desc = CATEGORIAS.get(cat_key, "Geral")
 
-    # Novo prompt baseado no estilo da 3ª fase da ONIA
+
+    # 3. Inclua **o trecho de código Python dentro do enunciado** (não como campo separado).
     prompt = f"""
 Você é um gerador de questões da Olimpíada Nacional de Inteligência Artificial (ONIA) - Categoria Regular.
 (Categoria: {cat_desc})
@@ -158,9 +90,15 @@ Responda SOMENTE com um JSON válido no formato:
   "explicacoes_erradas": [string,...]
 }}
 """
-
-    result = call_huggingface_api(prompt, num_alts, letters)
-
+    #result = call_huggingface_api(prompt, num_alts, letters)
+    raw=call_huggingface_api(prompt, num_alts, letters)
+    if isinstance(raw, dict):
+         result = raw
+    else:
+         result = _find_json(raw)    
+    if result is None:
+        return {"error": "Resposta inválida do modelo", "raw": raw}
+    
     # Garante explicações para alternativas incorretas
     if "explicacoes_erradas" not in result or not isinstance(result["explicacoes_erradas"], list):
         result["explicacoes_erradas"] = [
