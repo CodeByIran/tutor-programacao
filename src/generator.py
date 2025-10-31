@@ -37,13 +37,27 @@ def _find_json(s: str):
         return json.loads(candidate)
     except Exception:
         return None
+    
+AVAILABLE_MODELS = {
+    "llama": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "depseeack": "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+    "starcoder": "bigcode/starcoder-2-7b",
+    "gpt": "openai/gpt-oss-safeguard-20b",
+}
 
-def generate_question(topic: str, fase: int = 2, categoria: str = None) -> Dict[str, Any]:
+def generate_question(topic: str, fase: int = 2, categoria: str = None, model: str = "llama") -> Dict[str, Any]:
     """
     Gera uma questão de múltipla escolha estilo ONIA 3ª fase (Categoria Regular),
     baseada em Python e raciocínio lógico.
+    Permite escolher o modelo LLM da Hugging Face via parâmetro `model`.
     """
 
+    if model not in AVAILABLE_MODELS:
+        return {"error": f"Modelo '{model}' não disponível. Modelos válidos: {list(AVAILABLE_MODELS.keys())}"}
+
+    model_name = AVAILABLE_MODELS[model]
+    
+    
     try:
         fase = int(fase)
     except Exception:
@@ -91,7 +105,7 @@ Responda SOMENTE com um JSON válido no formato:
 }}
 """
     #result = call_huggingface_api(prompt, num_alts, letters)
-    raw=call_huggingface_api(prompt, num_alts, letters)
+    raw=call_huggingface_api(prompt, num_alts, letters, model_name=model_name)
     if isinstance(raw, dict):
          result = raw
     else:
@@ -123,23 +137,24 @@ def format_question(parsed: Dict[str, Any], num_alts: int, letters: list) -> Dic
     raise ValueError("Formato de alternativas inválido no JSON retornado")
 
 
-def call_huggingface_api(prompt: str, num_alts: int = 5, letters=None) -> Dict[str, Any]:
+def call_huggingface_api(prompt: str, num_alts: int = 5, letters=None, model_name: str = None) -> Dict[str, Any]:
     """
     Envia prompt para HuggingFace (InferenceClient ou requests) e retorna JSON da questão.
+    Permite escolher o modelo via parâmetro `model_name`.
     """
     letters = letters or ["A", "B", "C", "D", "E"]
+    model_to_use = model_name or MODEL  # usa o modelo passado ou o default do ambiente
 
     # Tenta usar InferenceClient se disponível
     if InferenceClient and API_KEY:
         try:
             client = InferenceClient(token=API_KEY)
             r = client.chat_completion(
-                model=MODEL,
+                model=model_to_use,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=400,
             )
-            text = r.get("choices", [{}])[0].get(
-                "message", {}).get("content", "")
+            text = r.get("choices", [{}])[0].get("message", {}).get("content", "")
             parsed = _find_json(text)
             if parsed:
                 return format_question(parsed, num_alts, letters)
@@ -148,11 +163,10 @@ def call_huggingface_api(prompt: str, num_alts: int = 5, letters=None) -> Dict[s
             raise RuntimeError(f"Erro no InferenceClient: {e}")
 
     # Fallback usando requests
-    url = ENDPOINT or f"https://api-inference.huggingface.co/models/{MODEL}"
+    url = ENDPOINT or f"https://api-inference.huggingface.co/models/{model_to_use}"
     headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
     try:
-        r = requests.post(url, headers=headers, json={
-                          "inputs": prompt}, timeout=60)
+        r = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=60)
         r.raise_for_status()
     except Exception as e:
         raise RuntimeError(f"Erro de conexão no requests: {e}")
@@ -170,3 +184,4 @@ def call_huggingface_api(prompt: str, num_alts: int = 5, letters=None) -> Dict[s
         raise ValueError(f"Resposta inválida no fallback: {txt}")
 
     raise RuntimeError(f"Resposta não compreendida: {body}")
+

@@ -20,9 +20,9 @@ def index():
 
 
 @app.get("/question")
-def question(topic: str = Query(...)):
+def question(topic: str = Query(...), model: str = Query("llama")):
     try:
-        out = generate_question(topic)
+        out = generate_question(topic, model=model)
         if isinstance(out, dict) and "error" in out:
             return JSONResponse(status_code=400, content=out)
         if isinstance(out, str):
