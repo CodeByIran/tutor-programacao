@@ -185,3 +185,17 @@ def call_huggingface_api(prompt: str, num_alts: int = 5, letters=None, model_nam
 
     raise RuntimeError(f"Resposta não compreendida: {body}")
 
+
+def generate_questions(topic: str, quantidade: int = 5, fase: int = 2, categoria: str = None, model: str = "llama") -> list:
+    """Gera um lote de questões usando `generate_question`.
+
+    Retorna lista de dicionários com as questões geradas (ou itens de erro quando ocorrer).
+    """
+    results = []
+    for i in range(int(quantidade)):
+        try:
+            q = generate_question(topic, fase=fase, categoria=categoria, model=model)
+            results.append(q)
+        except Exception as e:
+            results.append({"error": f"Erro ao gerar questão #{i+1}: {e}"})
+    return results

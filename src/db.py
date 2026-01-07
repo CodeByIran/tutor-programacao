@@ -21,5 +21,15 @@ class Question(Base):
     feedback = Column(Text, nullable=True)
 
 
+class Questao(Base):
+    __tablename__ = "questoes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    enunciado = Column(Text, nullable=False)
+    alternativas = Column(Text, nullable=False)  # armazenado como JSON
+    correta = Column(String, nullable=False)
+    feedback = Column(Text, nullable=True)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
