@@ -25,10 +25,13 @@ class Questao(Base):
     __tablename__ = "questoes"
 
     id = Column(Integer, primary_key=True, index=True)
+    categoria = Column(String, nullable=True)
+    topico = Column(String, nullable=True)
     enunciado = Column(Text, nullable=False)
     alternativas = Column(Text, nullable=False)  # armazenado como JSON
     correta = Column(String, nullable=False)
     feedback = Column(Text, nullable=True)
+    explicacoes_erradas = Column(Text, nullable=True)  # armazenado como JSON
 
 
 def init_db():

@@ -13,7 +13,7 @@ API_KEY = (
 )
 MODEL = os.getenv(
     "HUGGINGFACE_MODEL"
-) or "meta-llama/Llama-4-Scout-17B-16E-Instruct"
+) or "meta-llama/Meta-Llama-3-8B-Instruct"
 ENDPOINT = os.getenv("HUGGINGFACE_ENDPOINT")
 
 try:
@@ -39,7 +39,8 @@ def _find_json(s: str):
         return None
     
 AVAILABLE_MODELS = {
-    "llama": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "llama": "meta-llama/Meta-Llama-3-8B-Instruct",
+    "llama4": "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "depseeack": "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
     "starcoder": "bigcode/starcoder-2-7b",
     "gpt": "openai/gpt-oss-safeguard-20b",
@@ -139,51 +140,26 @@ def format_question(parsed: Dict[str, Any], num_alts: int, letters: list) -> Dic
 
 def call_huggingface_api(prompt: str, num_alts: int = 5, letters=None, model_name: str = None) -> Dict[str, Any]:
     """
-    Envia prompt para HuggingFace (InferenceClient ou requests) e retorna JSON da questão.
+    Envia prompt para HuggingFace (InferenceClient - chat_completion).
     Permite escolher o modelo via parâmetro `model_name`.
     """
     letters = letters or ["A", "B", "C", "D", "E"]
-    model_to_use = model_name or MODEL  # usa o modelo passado ou o default do ambiente
+    model_to_use = model_name or MODEL
 
-    # Tenta usar InferenceClient se disponível
-    if InferenceClient and API_KEY:
-        try:
-            client = InferenceClient(token=API_KEY)
-            r = client.chat_completion(
-                model=model_to_use,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400,
-            )
-            text = r.get("choices", [{}])[0].get("message", {}).get("content", "")
-            parsed = _find_json(text)
-            if parsed:
-                return format_question(parsed, num_alts, letters)
-            raise ValueError(f"Resposta inválida do modelo: {text}")
-        except Exception as e:
-            raise RuntimeError(f"Erro no InferenceClient: {e}")
+    if not InferenceClient or not API_KEY:
+        raise RuntimeError("InferenceClient não disponível ou HF_API_KEY não configurada")
 
-    # Fallback usando requests
-    url = ENDPOINT or f"https://api-inference.huggingface.co/models/{model_to_use}"
-    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
-    try:
-        r = requests.post(url, headers=headers, json={"inputs": prompt}, timeout=60)
-        r.raise_for_status()
-    except Exception as e:
-        raise RuntimeError(f"Erro de conexão no requests: {e}")
-
-    try:
-        body = r.json()
-    except Exception:
-        body = r.text
-
-    if isinstance(body, list) and body and isinstance(body[0], dict):
-        txt = body[0].get("generated_text") or body[0].get("text", "")
-        parsed = _find_json(txt or "")
-        if parsed:
-            return format_question(parsed, num_alts, letters)
-        raise ValueError(f"Resposta inválida no fallback: {txt}")
-
-    raise RuntimeError(f"Resposta não compreendida: {body}")
+    client = InferenceClient(api_key=API_KEY)
+    r = client.chat_completion(
+        model=model_to_use,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=400,
+    )
+    text = r.get("choices", [{}])[0].get("message", {}).get("content", "")
+    parsed = _find_json(text)
+    if parsed:
+        return format_question(parsed, num_alts, letters)
+    raise ValueError(f"Resposta inválida do modelo: {text}")
 
 
 def generate_questions(topic: str, quantidade: int = 5, fase: int = 2, categoria: str = None, model: str = "llama") -> list:

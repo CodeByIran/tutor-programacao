@@ -52,14 +52,25 @@ def gerar_questoes(topic: str = Body(..., embed=True), quantidade: int = Body(5,
     saved = []
     try:
         for it in items:
+            categoria = it.get("categoria") or ""
+            topico = it.get("topico") or ""
             enunciado = it.get("pergunta") or it.get("enunciado") or ""
             alternativas = it.get("alternativas") or []
-            # garante string JSON
             alt_text = _json.dumps(alternativas, ensure_ascii=False)
             correta = it.get("resposta_correta") or it.get("correta") or ""
             feedback = it.get("explicacao") or it.get("feedback") or ""
+            explicacoes_erradas = it.get("explicacoes_erradas") or []
+            exp_err_text = _json.dumps(explicacoes_erradas, ensure_ascii=False)
 
-            obj = Questao(enunciado=enunciado, alternativas=alt_text, correta=correta, feedback=feedback)
+            obj = Questao(
+                categoria=categoria,
+                topico=topico,
+                enunciado=enunciado,
+                alternativas=alt_text,
+                correta=correta,
+                feedback=feedback,
+                explicacoes_erradas=exp_err_text
+            )
             db.add(obj)
             db.flush()
             saved.append({"id": obj.id, "enunciado": enunciado, "correta": correta})
@@ -82,10 +93,42 @@ def question(topic: str = Query(...), model: str = Query("llama")):
         if isinstance(out, str):
             try:
                 import json
-
-                return json.loads(out)
+                out = json.loads(out)
             except Exception:
                 return {"raw_output": out}
+        
+        # Salvar no banco de dados
+        db = SessionLocal()
+        try:
+            categoria = out.get("categoria") or ""
+            topico = out.get("topico") or ""
+            enunciado = out.get("pergunta") or out.get("enunciado") or ""
+            alternativas = out.get("alternativas") or []
+            alt_text = _json.dumps(alternativas, ensure_ascii=False)
+            correta = out.get("resposta_correta") or out.get("correta") or ""
+            feedback = out.get("explicacao") or out.get("feedback") or ""
+            explicacoes_erradas = out.get("explicacoes_erradas") or []
+            exp_err_text = _json.dumps(explicacoes_erradas, ensure_ascii=False)
+            
+            obj = Questao(
+                categoria=categoria,
+                topico=topico,
+                enunciado=enunciado,
+                alternativas=alt_text,
+                correta=correta,
+                feedback=feedback,
+                explicacoes_erradas=exp_err_text
+            )
+            db.add(obj)
+            db.commit()
+            out["id"] = obj.id  # Adiciona o ID da questão salva na resposta
+        except Exception as e:
+            db.rollback()
+            # Não falha a requisição se der erro ao salvar, apenas loga
+            out["db_warning"] = f"Questão gerada mas não salva no banco: {str(e)}"
+        finally:
+            db.close()
+        
         return out
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -106,12 +149,19 @@ def listar_questoes(limit: int = Query(20, ge=1, le=200)):
                 alts = _json.loads(row.alternativas) if row.alternativas else []
             except Exception:
                 alts = row.alternativas
+            try:
+                exp_err = _json.loads(row.explicacoes_erradas) if row.explicacoes_erradas else []
+            except Exception:
+                exp_err = row.explicacoes_erradas or []
             items.append({
                 "id": row.id,
+                "categoria": row.categoria,
+                "topico": row.topico,
                 "enunciado": row.enunciado,
                 "alternativas": alts,
                 "correta": row.correta,
                 "feedback": row.feedback,
+                "explicacoes_erradas": exp_err,
             })
         return {"count": len(items), "items": items}
     except Exception as e:
